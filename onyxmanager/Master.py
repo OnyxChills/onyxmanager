@@ -13,8 +13,8 @@ class Master():
         if not os.path.isdir(master_control.log_dir):
             os.mkdir(master_control.log_dir)
 
-        log_file = utils.os_slash() + 'master.log'
-        logging.basicConfig(filename=master_control.log_dir + log_file,
+        self.log_file = utils.os_slash() + 'master.log'
+        logging.basicConfig(filename=master_control.log_dir + self.log_file,
                             level=logging.DEBUG,
                             format='%(asctime)s - %(levelname)s: %(message)s',
                             datefmt='%m/%d/%Y %I:%M:%S')

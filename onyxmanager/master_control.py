@@ -3,3 +3,4 @@
 
 working_dir = r'D:\onyxmanager'
 log_dir = working_dir + r'\logs'
+port = 27069

@@ -114,14 +114,16 @@ class Module:
 class Agent:
     def __init__(self, device_name=''):
         self.modules = {}
+        self.host = agent_control.host
+        self.port = agent_control.port
 
         if not os.path.isdir(agent_control.log_dir):
             os.mkdir(agent_control.log_dir)
         if not os.path.isdir(agent_control.working_dir):
             os.mkdir(agent_control.working_dir)
 
-        log_file = utils.os_slash() + 'agent.log'
-        logging.basicConfig(filename=(agent_control.log_dir) + log_file,
+        self.log_file = utils.os_slash() + 'agent.log'
+        logging.basicConfig(filename=str(agent_control.log_dir + self.log_file),
                             level=logging.DEBUG,
                             format='%(asctime)s - %(levelname)s: %(message)s',
                             datefmt='%m/%d/%Y %I:%M:%S')
@@ -159,7 +161,7 @@ class Agent:
                     logging.error('Module \'%s\' failed to load, missing file! - path=\'%s\'', file[:-3], file)
                     raise
 
-    def cache_facts(self):
+    def cache_facts_locally(self):
         try:
             self.device.dump_facts_as_json(str(agent_control.working_dir) + utils.os_slash() + 'device.facts')
             logging.info('Device facts dumped to \'%s\'',
@@ -167,3 +169,24 @@ class Agent:
         except Exception as e:
             logging.error('Error: %s', e)
             raise e
+
+    def cache_facts_remotely(self):
+        data = json.dumps(self.device.facts, indent=4)
+        sock = utils.OnyxSocket(socket.AF_INET, socket.SOCK_STREAM)
+
+        try:
+            sock.connect((self.host, self.port))
+            prefix = sock.send_device_cache(bytes(str(data), 'utf-8'))
+            received = str(sock.recv(1024), 'utf-8')[prefix.__len__():]
+
+            print('Sent:     {}'.format(data))
+            print('Received: {}'.format(received))
+
+            logging.info('Device facts dumped to \'%s\'',
+                         self.host)
+
+        except ConnectionRefusedError:
+            logging.warning('Connection to %s failed, is server up?', ({'host': self.host, 'port': self.port}))
+
+        finally:
+            sock.close()

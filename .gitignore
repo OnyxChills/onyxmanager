@@ -1,4 +1,3 @@
-/server_test.py
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -22,7 +21,6 @@ parts/
 sdist/
 var/
 *.egg-info/
-/client_test.py
 /pylintrc
 /test_case.py
 /LICENSE

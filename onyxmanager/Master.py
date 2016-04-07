@@ -1,7 +1,8 @@
 import logging
 import json
 import os
-import socket
+import atexit
+import socketserver
 from onyxmanager import master_control, utils, Agent
 
 class Master():
@@ -12,6 +13,8 @@ class Master():
             os.mkdir(master_control.working_dir)
         if not os.path.isdir(master_control.log_dir):
             os.mkdir(master_control.log_dir)
+        if not os.path.isdir(master_control.remote_fact_dir):
+            os.mkdir(master_control.remote_fact_dir)
 
         self.log_file = utils.os_slash() + 'master.log'
         logging.basicConfig(filename=master_control.log_dir + self.log_file,
@@ -36,6 +39,9 @@ class Master():
 
         self.device = Agent.Device(self.device_name, dev_uuid=loaded_UUID)
         self.cache_facts()
+        atexit.register(logging.info, 'OnyxManager Master v%s - Stopped', '0.0.5')
+
+        self.server = socketserver.TCPServer(('', master_control.port), utils.OnyxTCPHandler)
 
 
     def cache_facts(self):

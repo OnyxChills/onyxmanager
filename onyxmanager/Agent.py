@@ -6,6 +6,7 @@ import platform
 import uuid
 import re
 import subprocess
+import atexit
 from onyxmanager import utils, agent_control
 
 
@@ -145,6 +146,7 @@ class Agent:
 
         self.device = Device(device_name, dev_uuid=loaded_UUID)
         self.register_modules()
+        atexit.register(logging.info, 'OnyxManager Agent v%s - Stopped', '0.0.5')
 
     def register_modules(self):
         if not os.path.isdir(agent_control.working_dir):
@@ -186,7 +188,7 @@ class Agent:
                          self.host)
 
         except ConnectionRefusedError:
-            logging.warning('Connection to %s failed, is server up?', ({'host': self.host, 'port': self.port}))
+            logging.error('Connection to %s failed, is server up?', ({'host': self.host, 'port': self.port}))
 
         finally:
             sock.close()

@@ -1,7 +1,9 @@
 import socket
 import socketserver
 import json
+import logging
 from platform import platform
+from onyxmanager import master_control
 
 OS = 'OS'
 GENERAL = 'general'
@@ -32,8 +34,14 @@ class OnyxTCPHandler(socketserver.BaseRequestHandler):
                 if prefix == 'CACHE.FACTS':
                     self.data = self.data[prefix.__len__():]
                     j_device = json.loads(str(self.data, 'utf-8'), encoding='utf-8')
-                    self.request.send(bytes(prefix + PACKET_RESPONSES[True], 'utf-8'))
-                    print('{0}: Cached device facts for device UUID={1}'.format(prefix, j_device[GENERAL]['uuid']))
+                    try:
+                        with open(master_control.remote_fact_dir + os_slash() + j_device[GENERAL]['uuid'] + '_device.facts', 'w') as outfile:
+                            json.dump(j_device, outfile, sort_keys=True, indent=4)
+
+                        self.request.send(bytes(prefix + PACKET_RESPONSES[True], 'utf-8'))
+                        logging.info('{0}: Cached device facts for device UUID={1}'.format(prefix, j_device[GENERAL]['uuid']))
+                    except ConnectionRefusedError:
+                        logging.error('Connection to %s failed, is client accessible?', ({'client': self.client_address[0], 'port': self.client_address[1]}))
 
 
 class OnyxSocket(socket.socket):

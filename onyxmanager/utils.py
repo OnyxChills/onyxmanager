@@ -35,13 +35,21 @@ class OnyxTCPHandler(socketserver.BaseRequestHandler):
                     self.data = self.data[prefix.__len__():]
                     j_device = json.loads(str(self.data, 'utf-8'), encoding='utf-8')
                     try:
-                        with open(master_control.remote_fact_dir + os_slash() + j_device[GENERAL]['uuid'] + '_device.facts', 'w') as outfile:
+                        with open(master_control.remote_fact_dir +
+                                  os_slash() +
+                                  j_device[GENERAL]['uuid'] +
+                                  '_device.facts', 'w') \
+                                as outfile:
                             json.dump(j_device, outfile, sort_keys=True, indent=4)
 
                         self.request.send(bytes(prefix + PACKET_RESPONSES[True], 'utf-8'))
-                        logging.info('{0}: Cached device facts for device UUID={1}'.format(prefix, j_device[GENERAL]['uuid']))
+                        logging.info('%s: Cached device facts for device UUID=%s',
+                                     prefix,
+                                     j_device[GENERAL]['uuid'])
                     except ConnectionRefusedError:
-                        logging.error('Connection to %s failed, is client accessible?', ({'client': self.client_address[0], 'port': self.client_address[1]}))
+                        logging.error('Connection to %s failed, is client accessible?',
+                                      ({'client': self.client_address[0],
+                                        'port': self.client_address[1]}))
 
 
 class OnyxSocket(socket.socket):
@@ -52,4 +60,4 @@ class OnyxSocket(socket.socket):
 
 
 PACKET_PREFIX_LIST = ['CACHE.FACTS']
-PACKET_RESPONSES = { True: 'SUCCEED', False: 'FAILED'}
+PACKET_RESPONSES = {True: 'SUCCEED', False: 'FAILED'}

@@ -45,7 +45,7 @@ class Device:
         return self
 
     def build_network_facts(self):
-        def parse_ipconfig() -> dict:
+        def parse_ipconfig():
             ipconfig = subprocess.Popen('ipconfig /all', stdout=subprocess.PIPE)
             ip_info_bytes = ipconfig.stdout.read().split(b'\r\n')
             ip_info_str = [value.decode('utf-8') for value in ip_info_bytes if value != b'']
@@ -72,7 +72,7 @@ class Device:
             return titles
 
 
-        def get_ip_info() -> (dict, dict):
+        def get_ip_info():
             data = parse_ipconfig()
             for adapter in data:
                 if 'ethernet' in adapter or 'wireless' in adapter:
@@ -139,12 +139,16 @@ class Agent:
                 open(agent_control.working_dir + utils.os_slash() + 'device.facts')
             )['general']['uuid']
 
-        except FileNotFoundError:
+        except FileNotFoundError or IOError:
             loaded_UUID = ''
         except KeyError:
             loaded_UUID = ''
 
         self.device = Device(device_name, dev_uuid=loaded_UUID)
+
+        if not os.path.isfile(agent_control.working_dir + utils.os_slash() + 'device.facts'):
+            self.cache_facts_locally()
+
         self.register_modules()
         atexit.register(logging.info, 'OnyxManager Agent v%s - Stopped', '0.0.5')
 

@@ -43,7 +43,6 @@ class Master():
 
         self.server = socketserver.TCPServer(('', master_control.port), utils.OnyxTCPHandler)
 
-
     def cache_facts(self):
         try:
             self.device.dump_facts_as_json(str(master_control.working_dir) + utils.os_slash() + 'master.facts')

@@ -48,7 +48,7 @@ class OnyxTCPServer(ThreadingMixIn, TCPServer):
 
 class OnyxTCPHandler(StreamRequestHandler):
     def handle(self):
-        self.data = self.request.recv(1024).strip()
+        self.data = self.request.recv(2048).strip()
         print('{0} wrote:'.format(self.client_address[0]))
 
         for prefix in PACKET_PREFIX_LIST:

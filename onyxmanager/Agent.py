@@ -71,7 +71,6 @@ class Device:
 
             return titles
 
-
         def get_ip_info():
             data = parse_ipconfig()
             for adapter in data:
@@ -87,7 +86,11 @@ class Device:
                 try:
                     adapter_info['ipv4_address'] = ''.join(re.findall(r'[0-9]{1,3}\.?', adapter_info['ipv4_address']))
                 except:
-                    pass
+                    try:
+                        adapter_info['ipv4_address'] = ''.join(
+                            re.findall(r'[0-9]{1,3}\.?', adapter_info['autoconfiguration_ipv4_address']))
+                    except:
+                        pass
 
                 self.facts[utils.NETWORK][adapter_name] = {'ipv4_address': adapter_info['ipv4_address'],
                                                            'default_gateway': adapter_info['default_gateway'],

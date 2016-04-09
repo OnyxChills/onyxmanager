@@ -1,7 +1,8 @@
 import socket
-import socketserver
 import json
 import logging
+import ssl
+from socketserver import TCPServer, StreamRequestHandler, ThreadingMixIn
 from platform import platform
 from onyxmanager import master_control
 
@@ -23,8 +24,29 @@ def prefix_bytes(prefix: str):
         return send
     return decorator
 
+class OnyxTCPServer(ThreadingMixIn, TCPServer):
+    def __init__(self, server_address, RequestHandlerClass, certfile, keyfile, bind_and_activate=True):
+        TCPServer.__init__(self,
+                           server_address,
+                           RequestHandlerClass)
 
-class OnyxTCPHandler(socketserver.BaseRequestHandler):
+        self.socket = ssl.wrap_socket(socket.socket(self.address_family, self.socket_type),
+                                      server_side=True,
+                                      certfile=certfile,
+                                      keyfile=keyfile,
+                                      do_handshake_on_connect=False)
+
+        if bind_and_activate:
+            self.server_bind()
+            self.server_activate()
+
+    def get_request(self):
+        (socket, addr) = TCPServer.get_request(self)
+        socket.do_handshake()
+        return (socket, addr)
+
+
+class OnyxTCPHandler(StreamRequestHandler):
     def handle(self):
         self.data = self.request.recv(1024).strip()
         print('{0} wrote:'.format(self.client_address[0]))
@@ -52,7 +74,7 @@ class OnyxTCPHandler(socketserver.BaseRequestHandler):
                                         'port': self.client_address[1]}))
 
 
-class OnyxSocket(socket.socket):
+class OnyxSocket(ssl.SSLSocket):
     @prefix_bytes('CACHE.FACTS')
     def send_device_cache(self, *args, **kwargs):
         super(OnyxSocket, self).send(*args, **kwargs)

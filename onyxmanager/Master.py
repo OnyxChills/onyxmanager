@@ -2,7 +2,6 @@ import logging
 import json
 import os
 import atexit
-import socketserver
 from onyxmanager import master_control, utils, Agent
 
 class Master():
@@ -39,9 +38,10 @@ class Master():
 
         self.device = Agent.Device(self.device_name, dev_uuid=loaded_UUID)
         self.cache_facts()
-        atexit.register(logging.info, 'OnyxManager Master v%s - Stopped', '0.0.5')
 
-        self.server = socketserver.TCPServer(('', master_control.port), utils.OnyxTCPHandler)
+        self.start_server()
+
+        atexit.register(logging.info, 'OnyxManager Master v%s - Stopped', '0.0.5')
 
     def cache_facts(self):
         try:
@@ -51,3 +51,10 @@ class Master():
         except Exception as e:
             logging.error('Error: %s', e)
             raise e
+
+    def start_server(self):
+        self.server = utils.OnyxTCPServer(('', master_control.port),
+                                          utils.OnyxTCPHandler,
+                                          master_control.key_dir + utils.os_slash() + 'onyxmanager_server.crt',
+                                          master_control.key_dir + utils.os_slash() + 'onyxmanager_server.key')
+        self.server.serve_forever()

@@ -178,7 +178,10 @@ class Agent:
 
     def cache_facts_remotely(self):
         data = json.dumps(self.device.facts, indent=4)
-        sock = utils.OnyxSocket(socket.AF_INET, socket.SOCK_STREAM)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock = utils.OnyxSocket(sock=s,
+                                certfile=agent_control.key_dir + utils.os_slash() + 'onyxmanager_client.crt',
+                                keyfile=agent_control.key_dir + utils.os_slash() + 'onyxmanager_client.key')
 
         try:
             sock.connect((self.host, self.port))

@@ -41,7 +41,7 @@ class Master():
 
         self.start_server()
 
-        atexit.register(logging.info, 'OnyxManager Master v%s - Stopped', '0.0.5')
+        atexit.register(logging.info, 'OnyxManager Master v%s - Stopped', '0.0.6')
 
     def cache_facts(self):
         try:

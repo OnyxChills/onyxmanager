@@ -153,7 +153,7 @@ class Agent:
             self.cache_facts_locally()
 
         self.register_modules()
-        atexit.register(logging.info, 'OnyxManager Agent v%s - Stopped', '0.0.5')
+        atexit.register(logging.info, 'OnyxManager Agent v%s - Stopped', '0.0.6')
 
     def register_modules(self):
         if not os.path.isdir(agent_control.working_dir):
@@ -191,11 +191,14 @@ class Agent:
             prefix = sock.send_device_cache(bytes(str(data), 'utf-8'))
             received = str(sock.recv(1024), 'utf-8')[prefix.__len__():]
 
-            print('Sent:     {}'.format(data))
+            #print('Sent:     {}'.format(data))
             print('Received: {}'.format(received))
-
-            logging.info('Device facts dumped to \'%s\'',
-                         self.host)
+            if received == 'SUCCEED':
+                logging.info('Device facts dumped to \'%s\'',
+                             self.host)
+            else:
+                logging.info('Device facts could not be dumped to \'%s\'',
+                             self.host)
 
         except ConnectionRefusedError:
             logging.error('Connection to %s failed, is server up?', ({'host': self.host, 'port': self.port}))

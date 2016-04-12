@@ -55,35 +55,35 @@ class OnyxTCPServer(ThreadingMixIn, TCPServer):
 
 def build_config(type, isWindows):
     config = configparser.ConfigParser()
-    config['DEFAULT'] = {}
+    config[type] = {}
 
     if type == 'Agent':
-        config['DEFAULT']['ProgramDirectory'] = r'C:\onyxmanager' if isWindows else '/etc/onyxmanager'
-        config['DEFAULT']['LogDirectory'] = config['DEFAULT']['ProgramDirectory'] + r'\logs' if isWindows else '/var/log/onyxmanager'
-        config['DEFAULT']['KeyDirectory'] = config['DEFAULT']['ProgramDirectory'] + (r'\keys' if isWindows else '/keys')
-        config['DEFAULT']['Host'] = '0.0.0.0'
-        config['DEFAULT']['Port'] = '27069'
+        config[type]['ProgramDirectory'] = r'C:\onyxmanager' if isWindows else '/etc/onyxmanager'
+        config[type]['LogDirectory'] = config[type]['ProgramDirectory'] + r'\logs' if isWindows else '/var/log/onyxmanager'
+        config[type]['KeyDirectory'] = config[type]['ProgramDirectory'] + (r'\keys' if isWindows else '/keys')
+        config[type]['Host'] = '0.0.0.0'
+        config[type]['Port'] = '27069'
 
     elif type == 'Master':
-        config['DEFAULT']['ProgramDirectory'] = r'C:\onyxmanager' if isWindows else '/etc/onyxmanager'
-        config['DEFAULT']['LogDirectory'] = config['DEFAULT']['ProgramDirectory'] + r'\logs' if isWindows else '/var/log/onyxmanager'
-        config['DEFAULT']['KeyDirectory'] = config['DEFAULT']['ProgramDirectory'] + (r'\keys' if isWindows else '/keys')
-        config['DEFAULT']['RemoteDirectory'] = config['DEFAULT']['ProgramDirectory'] + (r'\remotes' if isWindows else '/remotes')
-        config['DEFAULT']['ListenAddress'] = '127.0.0.1'
-        config['DEFAULT']['Port'] = '27069'
+        config[type]['ProgramDirectory'] = r'C:\onyxmanager' if isWindows else '/etc/onyxmanager'
+        config[type]['LogDirectory'] = config[type]['ProgramDirectory'] + r'\logs' if isWindows else '/var/log/onyxmanager'
+        config[type]['KeyDirectory'] = config[type]['ProgramDirectory'] + (r'\keys' if isWindows else '/keys')
+        config[type]['RemoteDirectory'] = config[type]['ProgramDirectory'] + (r'\remotes' if isWindows else '/remotes')
+        config[type]['ListenAddress'] = '127.0.0.1'
+        config[type]['Port'] = '27069'
 
-    if not os.path.isdir(config['DEFAULT']['ProgramDirectory']):
-        os.mkdir(config['DEFAULT']['ProgramDirectory'])
-    if not os.path.isdir(config['DEFAULT']['LogDirectory']):
-        os.mkdir(config['DEFAULT']['LogDirectory'])
-    if not os.path.isdir(config['DEFAULT']['KeyDirectory']):
-        os.mkdir(config['DEFAULT']['KeyDirectory'])
+    if not os.path.isdir(config[type]['ProgramDirectory']):
+        os.mkdir(config[type]['ProgramDirectory'])
+    if not os.path.isdir(config[type]['LogDirectory']):
+        os.mkdir(config[type]['LogDirectory'])
+    if not os.path.isdir(config[type]['KeyDirectory']):
+        os.mkdir(config[type]['KeyDirectory'])
 
     if type == 'Master':
-        if not os.path.isdir(config['DEFAULT']['RemoteDirectory']):
-            os.mkdir(config['DEFAULT']['RemoteDirectory'])
+        if not os.path.isdir(config[type]['RemoteDirectory']):
+            os.mkdir(config[type]['RemoteDirectory'])
 
-    with open(config['DEFAULT']['ProgramDirectory'] + os_slash() + 'onyxmanager_' + type + '.conf', 'w') as configfile:
+    with open(config[type]['ProgramDirectory'] + os_slash() + 'onyxmanager_' + type + '.conf', 'w') as configfile:
         config.write(configfile)
 
 

@@ -2,6 +2,8 @@ import socket
 import json
 import logging
 import ssl
+import configparser
+import os
 from socketserver import TCPServer, StreamRequestHandler, ThreadingMixIn
 from platform import platform
 from onyxmanager import master_control
@@ -13,16 +15,21 @@ NETWORK = 'network'
 
 
 def os_slash():
-    return '\\' if platform(0, 1).replace('-', ' ').split(' ', 1)[0] == 'Windows' else '/'
+    return '\\' if prefact_os() else '/'
 
 
-def prefix_bytes(prefix: str):
+def prefact_os():
+    return True if platform(0, 1).replace('-', ' ').split(' ', 1)[0] == 'Windows' else False
+
+
+def prefix_bytes(prefix):
     def decorator(func):
         def send(*args, **kwargs):
             new_args = [args[0], bytes(str(prefix), 'utf-8') + args[1]]
             return func(*new_args, **kwargs)
         return send
     return decorator
+
 
 class OnyxTCPServer(ThreadingMixIn, TCPServer):
     def __init__(self, server_address, RequestHandlerClass, certfile, keyfile, bind_and_activate=True):
@@ -44,6 +51,40 @@ class OnyxTCPServer(ThreadingMixIn, TCPServer):
         (socket, addr) = TCPServer.get_request(self)
         socket.do_handshake()
         return (socket, addr)
+
+
+def build_config(type, isWindows):
+    config = configparser.ConfigParser()
+    config['DEFAULT'] = {}
+
+    if type == 'Agent':
+        config['DEFAULT']['ProgramDirectory'] = r'C:\onyxmanager' if isWindows else '/etc/onyxmanager'
+        config['DEFAULT']['LogDirectory'] = config['DEFAULT']['ProgramDirectory'] + r'\logs' if isWindows else '/var/log/onyxmanager'
+        config['DEFAULT']['KeyDirectory'] = config['DEFAULT']['ProgramDirectory'] + (r'\keys' if isWindows else '/keys')
+        config['DEFAULT']['Host'] = '0.0.0.0'
+        config['DEFAULT']['Port'] = '27069'
+
+    elif type == 'Master':
+        config['DEFAULT']['ProgramDirectory'] = r'C:\onyxmanager' if isWindows else '/etc/onyxmanager'
+        config['DEFAULT']['LogDirectory'] = config['DEFAULT']['ProgramDirectory'] + r'\logs' if isWindows else '/var/log/onyxmanager'
+        config['DEFAULT']['KeyDirectory'] = config['DEFAULT']['ProgramDirectory'] + (r'\keys' if isWindows else '/keys')
+        config['DEFAULT']['RemoteDirectory'] = config['DEFAULT']['ProgramDirectory'] + (r'\remotes' if isWindows else '/remotes')
+        config['DEFAULT']['ListenAddress'] = '127.0.0.1'
+        config['DEFAULT']['Port'] = '27069'
+
+    if not os.path.isdir(config['DEFAULT']['ProgramDirectory']):
+        os.mkdir(config['DEFAULT']['ProgramDirectory'])
+    if not os.path.isdir(config['DEFAULT']['LogDirectory']):
+        os.mkdir(config['DEFAULT']['LogDirectory'])
+    if not os.path.isdir(config['DEFAULT']['KeyDirectory']):
+        os.mkdir(config['DEFAULT']['KeyDirectory'])
+
+    if type == 'Master':
+        if not os.path.isdir(config['DEFAULT']['RemoteDirectory']):
+            os.mkdir(config['DEFAULT']['RemoteDirectory'])
+
+    with open(config['DEFAULT']['ProgramDirectory'] + os_slash() + 'onyxmanager_' + type + '.conf', 'w') as configfile:
+        config.write(configfile)
 
 
 class OnyxTCPHandler(StreamRequestHandler):

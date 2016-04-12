@@ -121,10 +121,8 @@ class Agent:
         self.host = agent_control.host
         self.port = agent_control.port
 
-        if not os.path.isdir(agent_control.log_dir):
-            os.mkdir(agent_control.log_dir)
-        if not os.path.isdir(agent_control.working_dir):
-            os.mkdir(agent_control.working_dir)
+        if not os.path.isfile('onyxmanager_' + 'Agent' + '.conf'):
+            utils.build_config('Agent', utils.prefact_os())
 
         self.log_file = utils.os_slash() + 'agent.log'
         logging.basicConfig(filename=str(agent_control.log_dir + self.log_file),

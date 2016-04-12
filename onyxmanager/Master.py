@@ -4,16 +4,13 @@ import os
 import atexit
 from onyxmanager import master_control, utils, Agent
 
+
 class Master():
     def __init__(self):
         self.device_name = 'master'
 
-        if not os.path.isdir(master_control.working_dir):
-            os.mkdir(master_control.working_dir)
-        if not os.path.isdir(master_control.log_dir):
-            os.mkdir(master_control.log_dir)
-        if not os.path.isdir(master_control.remote_fact_dir):
-            os.mkdir(master_control.remote_fact_dir)
+        if not os.path.isfile('onyxmanager_' + 'Master' + '.conf'):
+            utils.build_config('Master', utils.prefact_os())
 
         self.log_file = utils.os_slash() + 'master.log'
         logging.basicConfig(filename=master_control.log_dir + self.log_file,

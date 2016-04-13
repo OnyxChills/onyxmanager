@@ -6,7 +6,6 @@ import configparser
 import os
 from socketserver import TCPServer, StreamRequestHandler, ThreadingMixIn
 from platform import platform
-from onyxmanager import master_control
 
 OS = 'OS'
 GENERAL = 'general'
@@ -53,7 +52,7 @@ class OnyxTCPServer(ThreadingMixIn, TCPServer):
         return (socket, addr)
 
 
-def build_config(type, isWindows):
+def build_config(type, isWindows, file):
     config = configparser.ConfigParser()
     config[type] = {}
 
@@ -61,7 +60,9 @@ def build_config(type, isWindows):
         config[type]['ProgramDirectory'] = r'C:\onyxmanager' if isWindows else '/etc/onyxmanager'
         config[type]['LogDirectory'] = config[type]['ProgramDirectory'] + r'\logs' if isWindows else '/var/log/onyxmanager'
         config[type]['KeyDirectory'] = config[type]['ProgramDirectory'] + (r'\keys' if isWindows else '/keys')
-        config[type]['Host'] = '0.0.0.0'
+        config[type]['ModuleDirectory'] = config[type]['ProgramDirectory'] + (r'\modules' if isWindows else '/modules')
+
+        config[type]['Host'] = '127.0.0.1'
         config[type]['Port'] = '27069'
 
     elif type == 'Master':
@@ -69,6 +70,7 @@ def build_config(type, isWindows):
         config[type]['LogDirectory'] = config[type]['ProgramDirectory'] + r'\logs' if isWindows else '/var/log/onyxmanager'
         config[type]['KeyDirectory'] = config[type]['ProgramDirectory'] + (r'\keys' if isWindows else '/keys')
         config[type]['RemoteDirectory'] = config[type]['ProgramDirectory'] + (r'\remotes' if isWindows else '/remotes')
+        config[type]['ModuleDirectory'] = config[type]['ProgramDirectory'] + (r'\modules' if isWindows else '/modules')
         config[type]['ListenAddress'] = '127.0.0.1'
         config[type]['Port'] = '27069'
 
@@ -78,12 +80,14 @@ def build_config(type, isWindows):
         os.mkdir(config[type]['LogDirectory'])
     if not os.path.isdir(config[type]['KeyDirectory']):
         os.mkdir(config[type]['KeyDirectory'])
+    if not os.path.isdir(config[type]['ModuleDirectory']):
+        os.mkdir(config[type]['ModuleDirectory'])
 
     if type == 'Master':
         if not os.path.isdir(config[type]['RemoteDirectory']):
             os.mkdir(config[type]['RemoteDirectory'])
 
-    with open(config[type]['ProgramDirectory'] + os_slash() + 'onyxmanager_' + type + '.conf', 'w') as configfile:
+    with open(file, 'w') as configfile:
         config.write(configfile)
 
 
@@ -98,10 +102,12 @@ class OnyxTCPHandler(StreamRequestHandler):
                     self.data = self.data[prefix.__len__():]
                     j_device = json.loads(str(self.data, 'utf-8'), encoding='utf-8')
                     try:
-                        with open(master_control.remote_fact_dir +
-                                  os_slash() +
-                                  j_device[GENERAL]['uuid'] +
-                                  '_device.facts', 'w') \
+                        config_parser = configparser.ConfigParser()
+                        config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
+                                           + 'onyxmanager_Master.conf')
+                        config = config_parser['Master']
+
+                        with open(config['RemoteDirectory'] + os_slash() + j_device[GENERAL]['uuid'] + '_device.facts', 'w') \
                                 as outfile:
                             json.dump(j_device, outfile, sort_keys=True, indent=4)
 

@@ -7,7 +7,8 @@ import uuid
 import re
 import subprocess
 import atexit
-from onyxmanager import utils, agent_control
+import configparser
+from onyxmanager import utils
 
 
 class Device:
@@ -118,26 +119,29 @@ class Module:
 class Agent:
     def __init__(self, device_name=''):
         self.modules = {}
-        self.host = agent_control.host
-        self.port = agent_control.port
+        self.config_file = ('C:\\onyxmanager\\' if utils.prefact_os() else '/etc/onyxmanager/') + 'onyxmanager_' + 'Agent' + '.conf'
 
-        if not os.path.isfile('onyxmanager_' + 'Agent' + '.conf'):
-            utils.build_config('Agent', utils.prefact_os())
+        if not os.path.isfile(self.config_file):
+            utils.build_config('Agent', utils.prefact_os(), self.config_file)
+
+        config_parser = configparser.ConfigParser()
+        config_parser.read(self.config_file)
+        self.config = config_parser['Agent']
 
         self.log_file = utils.os_slash() + 'agent.log'
-        logging.basicConfig(filename=str(agent_control.log_dir + self.log_file),
+        logging.basicConfig(filename=self.config['LogDirectory'] + self.log_file,
                             level=logging.DEBUG,
                             format='%(asctime)s - %(levelname)s: %(message)s',
                             datefmt='%m/%d/%Y %I:%M:%S')
 
         logging.info('')
-        logging.info('OnyxManager Agent v%s - Started', '0.0.5')
-        logging.info('Log directory set to \'%s\'', agent_control.log_dir)
-        logging.info('Working directory set to \'%s\'', agent_control.working_dir)
+        logging.info('OnyxManager Agent v%s - Started', '0.0.6')
+        logging.info('Log directory set to \'%s\'', self.config['LogDirectory'])
+        logging.info('Working directory set to \'%s\'', self.config['ProgramDirectory'])
 
         try:
             loaded_UUID = json.load(
-                open(agent_control.working_dir + utils.os_slash() + 'device.facts')
+                open(self.config['ProgramDirectory'] + utils.os_slash() + 'agent.facts')
             )['general']['uuid']
 
         except FileNotFoundError or IOError:
@@ -147,20 +151,20 @@ class Agent:
 
         self.device = Device(device_name, dev_uuid=loaded_UUID)
 
-        if not os.path.isfile(agent_control.working_dir + utils.os_slash() + 'device.facts'):
+        if not os.path.isfile(self.config['ProgramDirectory'] + utils.os_slash() + 'agent.facts'):
             self.cache_facts_locally()
 
         self.register_modules()
         atexit.register(logging.info, 'OnyxManager Agent v%s - Stopped', '0.0.6')
 
     def register_modules(self):
-        if not os.path.isdir(agent_control.working_dir):
-            os.mkdir(agent_control.working_dir)
-        for file in os.listdir(agent_control.working_dir):
+        if not os.path.isdir(self.config['ProgramDirectory']):
+            os.mkdir(self.config['ProgramDirectory'])
+        for file in os.listdir(self.config['ProgramDirectory']):
             if file.endswith('.py'):
                 try:
                     self.modules[file[:-3]] = Module(file[:-3],
-                                                     agent_control.working_dir  + utils.os_slash() + file,
+                                                     self.config['ProgramDirectory']  + utils.os_slash() + file,
                                                      self.device)
 
                     logging.info('Module \'%s\' added - path=\'%s\'', file[:-3], file)
@@ -170,9 +174,9 @@ class Agent:
 
     def cache_facts_locally(self):
         try:
-            self.device.dump_facts_as_json(str(agent_control.working_dir) + utils.os_slash() + 'device.facts')
+            self.device.dump_facts_as_json(self.config['ProgramDirectory'] + utils.os_slash() + 'agent.facts')
             logging.info('Device facts dumped to \'%s\'',
-                         str(agent_control.working_dir) + utils.os_slash() + 'device.facts')
+                         self.config['ProgramDirectory'] + utils.os_slash() + 'agent.facts')
         except Exception as e:
             logging.error('Error: %s', e)
             raise e
@@ -181,25 +185,24 @@ class Agent:
         data = json.dumps(self.device.facts, indent=4)
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock = utils.OnyxSocket(sock=s,
-                                certfile=agent_control.key_dir + utils.os_slash() + 'onyxmanager_client.crt',
-                                keyfile=agent_control.key_dir + utils.os_slash() + 'onyxmanager_client.key')
+                                certfile=self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_client.crt',
+                                keyfile=self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_client.key')
 
         try:
-            sock.connect((self.host, self.port))
+            sock.connect((self.config['Host'], int(self.config['Port'])))
             prefix = sock.send_device_cache(bytes(str(data), 'utf-8'))
             received = str(sock.recv(1024), 'utf-8')[prefix.__len__():]
 
-            #print('Sent:     {}'.format(data))
             print('Received: {}'.format(received))
             if received == 'SUCCEED':
                 logging.info('Device facts dumped to \'%s\'',
-                             self.host)
+                             self.config['Host'])
             else:
                 logging.info('Device facts could not be dumped to \'%s\'',
-                             self.host)
+                             self.config['Host'])
 
         except ConnectionRefusedError:
-            logging.error('Connection to %s failed, is server up?', ({'host': self.host, 'port': self.port}))
+            logging.error('Connection to %s failed, is server up?', ({'host': self.config['Host'], 'port': int(self.config['Port'])}))
 
         finally:
             sock.close()

@@ -151,6 +151,11 @@ class Agent:
 
         self.device = Device(device_name, dev_uuid=loaded_UUID)
 
+        if not os.path.isdir(self.config['KeyDirectory']):
+            os.mkdir(self.config['KeyDirectory'])
+
+        utils.create_self_signed_cert(self.config['KeyDirectory'], 'onyxmanager_agent.crt', 'onyxmanager_agent.key')
+
         if not os.path.isfile(self.config['ProgramDirectory'] + utils.os_slash() + 'agent.facts'):
             self.cache_facts_locally()
 
@@ -185,19 +190,22 @@ class Agent:
         data = json.dumps(self.device.facts, indent=4)
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock = utils.OnyxSocket(sock=s,
-                                certfile=self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_client.crt',
-                                keyfile=self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_client.key')
+                                certfile=self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_agent.crt',
+                                keyfile=self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_agent.key')
 
         try:
             sock.connect((self.config['Host'], int(self.config['Port'])))
+            sock.set_device(self.device)
             prefix = sock.send_device_cache(bytes(str(data), 'utf-8'))
             received = str(sock.recv(1024), 'utf-8')[prefix.__len__():]
 
-            print('Received: {}'.format(received))
+
             if received == 'SUCCEED':
+                print('Received: {}'.format(received))
                 logging.info('Device facts dumped to \'%s\'',
                              self.config['Host'])
             else:
+                print('Received: {}'.format('FAILED'))
                 logging.info('Device facts could not be dumped to \'%s\'',
                              self.config['Host'])
 

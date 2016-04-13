@@ -56,8 +56,11 @@ class Master():
             raise e
 
     def start_server(self):
+        if not os.path.isdir(self.config['KeyDirectory']):
+            os.mkdir(self.config['KeyDirectory'])
+        utils.create_self_signed_cert(self.config['KeyDirectory'], 'onyxmanager_master.crt', 'onyxmanager_master.key')
         self.server = utils.OnyxTCPServer(('', int(self.config['Port'])),
                                           utils.OnyxTCPHandler,
-                                          self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_server.crt',
-                                          self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_server.key')
+                                          self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_master.crt',
+                                          self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_master.key')
         self.server.serve_forever()

@@ -22,15 +22,6 @@ def prefact_os():
     return True if platform(0, 1).replace('-', ' ').split(' ', 1)[0] == 'Windows' else False
 
 
-def prefix_bytes(prefix):
-    def decorator(func):
-        def send(*args, **kwargs):
-            new_args = [args[0], bytes(str(prefix), 'utf-8') + args[1]]
-            return func(*new_args, **kwargs)
-        return send
-    return decorator
-
-
 class OnyxTCPServer(ThreadingMixIn, TCPServer):
     def __init__(self, server_address, RequestHandlerClass, certfile, keyfile, bind_and_activate=True):
         TCPServer.__init__(self,
@@ -95,90 +86,110 @@ def build_config(type, isWindows, file):
 class OnyxTCPHandler(StreamRequestHandler):
     def handle(self):
         self.data = self.request.recv(2048).strip()
-        print('{0} wrote:'.format(self.client_address[0]))
 
-        for prefix in PACKET_PREFIX_LIST:
-            if self.data.startswith(bytes(prefix, 'utf-8')):
-                if prefix == 'CACHE.FACTS':
-                    self.data = self.data[prefix.__len__():]
-                    j_device = json.loads(str(self.data, 'utf-8'), encoding='utf-8')
-                    try:
-                        config_parser = configparser.ConfigParser()
-                        config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
-                                           + 'onyxmanager_Master.conf')
-                        config = config_parser['Master']
+        if self.data == b'':
+            pass
+        else:
+            print('{0} wrote: {1}'.format(self.client_address[0], self.data))
+            for prefix in PACKET_PREFIX_LIST:
+                if self.data.startswith(bytes(prefix, 'utf-8')):
+                    if prefix == 'CACHE.FACTS':
+                        self.data = self.data[prefix.__len__():]
+                        j_device = json.loads(str(self.data, 'utf-8'), encoding='utf-8')
+                        try:
+                            config_parser = configparser.ConfigParser()
+                            config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
+                                               + 'onyxmanager_Master.conf')
+                            config = config_parser['Master']
 
-                        with open(config['RemoteDirectory'] + os_slash() + j_device[GENERAL]['uuid'] + '_device.facts', 'w') \
-                                as outfile:
-                            json.dump(j_device, outfile, sort_keys=True, indent=4)
+                            with open(config['RemoteDirectory'] + os_slash() + j_device[GENERAL]['uuid'] + '_device.facts', 'w') \
+                                    as outfile:
+                                json.dump(j_device, outfile, sort_keys=True, indent=4)
 
-                        self.request.send(bytes(prefix + PACKET_RESPONSES[True], 'utf-8'))
-                        logging.info('%s: Cached device facts for device UUID=%s',
-                                     prefix,
-                                     j_device[GENERAL]['uuid'])
-                    except ConnectionRefusedError:
-                        logging.error('Connection to %s failed, is client accessible?',
-                                      ({'client': self.client_address[0],
-                                        'port': self.client_address[1]}))
+                            self.request.send(bytes(prefix + PACKET_RESPONSES[True], 'utf-8'))
+                            logging.info('%s: Cached device facts for device UUID=%s',
+                                         prefix,
+                                         j_device[GENERAL]['uuid'])
+                        except ConnectionRefusedError:
+                            logging.error('Connection to %s failed, is client accessible?',
+                                          ({'client': self.client_address[0],
+                                            'port': self.client_address[1]}))
 
-                elif prefix == 'REQ.VERIFY':
-                    self.data = self.data[prefix.__len__():]
-                    agent_uuid = str(self.data, 'utf-8').upper()
-                    print(agent_uuid)
-                    try:
-                        config_parser = configparser.ConfigParser()
-                        config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
-                                           + 'onyxmanager_Master.conf')
-                        config = config_parser['Master']
+                    elif prefix == 'REQ.VERIFY':
+                        self.data = self.data[prefix.__len__():]
+                        agent_uuid = str(self.data, 'utf-8').upper()
+                        print(agent_uuid)
+                        try:
+                            config_parser = configparser.ConfigParser()
+                            config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
+                                               + 'onyxmanager_Master.conf')
+                            config = config_parser['Master']
 
-                        with open(config['KeyDirectory'] + os_slash() + 'verified_agents.txt') as file:
-                            verified = False
-                            for verified_agent in file:
-                                if agent_uuid == verified_agent.strip().upper() and not verified:
-                                    self.request.send(bytes(prefix + PACKET_RESPONSES[True], 'utf-8'))
-                                    verified = True
+                            with open(config['KeyDirectory'] + os_slash() + 'verified_agents.txt') as file:
+                                verified = False
+                                for verified_agent in file:
+                                    if agent_uuid == verified_agent.strip().upper() and not verified:
+                                        logging.info('%s: Agent UUID verified.', prefix)
+                                        self.request.send(bytes(prefix + PACKET_RESPONSES[True], 'utf-8'))
+                                        verified = True
 
-                            if not verified:
+                                if not verified:
+                                    logging.error('Connection to %s failed, agent UUID denied.',
+                                                  ({'client': self.client_address[0],
+                                                  'port': self.client_address[1]}))
+
                                 self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
 
-                    except FileNotFoundError:
-                        self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
+                        except FileNotFoundError:
+                            self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
+
+
+def prefix_bytes(prefix):
+    def decorator(func):
+        def send(*args, **kwargs):
+            new_args = [args[0], bytes(str(prefix), 'utf-8') + args[1]]
+            return func(*new_args, **kwargs)
+        return send
+    return decorator
+
+
+def check_verification():
+    def decorator(func):
+        def send(*args, **kwargs):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            ver_sock = OnyxSocket(sock=s,
+                                  certfile=args[0].certfile,
+                                  keyfile=args[0].keyfile)
+
+            config_parser = configparser.ConfigParser()
+            config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
+                               + 'onyxmanager_Agent.conf')
+            config = config_parser['Agent']
+
+            ver_sock.connect((config['Host'], int(config['Port'])))
+            ver_sock.send(bytes('REQ.VERIFY' + args[0].device.facts['general']['uuid'], 'utf-8'))
+            received = str(ver_sock.recv(1024), 'utf-8')['REQ.VERIFY'.__len__():]
+
+            if received == 'SUCCEED':
+                logging.info('Host verified agent request.')
+                return func(*args, **kwargs)
+            else:
+                logging.info('Host denied agent request')
+                raise ConnectionRefusedError('Agent UUID was denied by the server.')
+
+        return send
+    return decorator
 
 
 class OnyxSocket(ssl.SSLSocket):
     def set_device(self, device):
         self.device = device
 
+    @check_verification()
     @prefix_bytes('CACHE.FACTS')
     def send_device_cache(self, device_facts):
-        if self.check_verification(bytes(self.device.facts['general']['uuid'], 'utf-8')): #Sleepy, but make this a decorator
-            print('Should send')
-            self.send(device_facts)
+        self.send(device_facts)
         return 'CACHE.FACTS'
-
-    @prefix_bytes('REQ.VERIFY')
-    def check_verification(self, agent_uuid):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        ver_sock = OnyxSocket(sock=s,
-                              certfile=self.certfile,
-                              keyfile=self.keyfile)
-
-        config_parser = configparser.ConfigParser()
-        config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
-                           + 'onyxmanager_Agent.conf')
-        config = config_parser['Agent']
-
-        ver_sock.connect((config['Host'], int(config['Port'])))
-        ver_sock.send(agent_uuid)
-        received = str(ver_sock.recv(1024), 'utf-8')['REQ.VERIFY'.__len__():]
-
-        if received == 'SUCCEED':
-            logging.info('Host verified agent request.')
-            return True
-        else:
-            logging.info('Host denied agent request')
-            return False
-
 
 
 PACKET_PREFIX_LIST = ['CACHE.FACTS', 'REQ.VERIFY']

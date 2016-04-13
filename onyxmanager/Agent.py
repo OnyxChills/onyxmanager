@@ -209,8 +209,9 @@ class Agent:
                 logging.info('Device facts could not be dumped to \'%s\'',
                              self.config['Host'])
 
-        except ConnectionRefusedError:
-            logging.error('Connection to %s failed, is server up?', ({'host': self.config['Host'], 'port': int(self.config['Port'])}))
+        except ConnectionRefusedError as reason:
+            logging.error('Connection to %s failed, %s', ({'host': self.config['Host'], 'port': int(self.config['Port'])}), reason)
+
 
         finally:
             sock.close()

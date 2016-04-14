@@ -85,6 +85,7 @@ def build_config(type, isWindows, file):
     with open(file, 'w') as configfile:
         config.write(configfile)
 
+twofactor_authkeys = list()
 
 class OnyxTCPHandler(StreamRequestHandler):
     def handle(self):
@@ -95,12 +96,11 @@ class OnyxTCPHandler(StreamRequestHandler):
         else:
             print('{0} wrote: {1}'.format(self.client_address[0], self.data))
             for prefix in PACKET_PREFIX_LIST:
-                if self.data.startswith(bytes(prefix, 'utf-8')):    # Add check for a generated key that was sent in the 'REQ.VERIFY'
-                    authkey = self.data[len(prefix):len(prefix) + 8]
-                    print(authkey)
+                if self.data.startswith(bytes(prefix, 'utf-8')):
+                    authkey = str(self.data[len(prefix):len(prefix) + 8], 'utf-8')
                     self.clean_twofactor_authkeys()
 
-                    if prefix == 'CACHE.FACTS' and authkey in (_[0] for _ in self.authkeys):
+                    if prefix == 'CACHE.FACTS' and authkey in [key[0] for key in twofactor_authkeys]:
                         self.data = self.data[len(prefix) + len(authkey):]
                         j_device = json.loads(str(self.data, 'utf-8'), encoding='utf-8')
                         try:
@@ -136,8 +136,6 @@ class OnyxTCPHandler(StreamRequestHandler):
                                 for verified_agent in file:
                                     if agent_uuid == verified_agent.strip().upper() and not verified:
                                         logging.info('%s: Agent UUID verified.', prefix)
-
-
                                         self.request.send(bytes(prefix + PACKET_RESPONSES[True] + self.add_twofactor_authkey(), 'utf-8'))
                                         verified = True
 
@@ -145,8 +143,7 @@ class OnyxTCPHandler(StreamRequestHandler):
                                     logging.error('Connection to %s failed, agent UUID denied.',
                                                   ({'client': self.client_address[0],
                                                   'port': self.client_address[1]}))
-
-                                self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
+                                    self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
 
                         except FileNotFoundError:
                             self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
@@ -154,24 +151,16 @@ class OnyxTCPHandler(StreamRequestHandler):
     def add_twofactor_authkey(self):
         key = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(8))
         now = time.time()
-        expiry = time.time() + 5.0 # This is seconds
-
-        # Store key for actual connection check
-        self.clean_twofactor_authkeys()
-        self.authkeys.append((key, now, expiry))
+        expiry = time.time() + 5.0                  # This is seconds
+        twofactor_authkeys.append((key, now, expiry))
 
         return key
 
     def clean_twofactor_authkeys(self):
-        try:
-            self.authkeys
-        except AttributeError:
-            self.authkeys = list()
-
-        for index, authkey in enumerate(self.authkeys):
+        for index, authkey in enumerate(twofactor_authkeys):
             now = time.time()
-            if now > authkey[2] :
-                self.authkeys.pop(index)
+            if now > authkey[2]:
+                twofactor_authkeys.pop(index)
 
 
 def prefix_bytes(prefix):
@@ -208,7 +197,6 @@ def check_verification():
             if received.startswith('SUCCEED'):
                 logging.info('Host verified agent request.')
                 data = args[-1:][0]
-                print(received[7:])
                 new_args = args[:-1] + (bytes(received[7:], 'utf-8') + data,)
 
                 return func(*new_args, **kwargs)

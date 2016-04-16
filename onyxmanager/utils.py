@@ -101,52 +101,61 @@ class OnyxTCPHandler(StreamRequestHandler):
                     self.clean_twofactor_authkeys()
 
                     if prefix == 'CACHE.FACTS' and authkey in [key[0] for key in twofactor_authkeys]:
-                        self.data = self.data[len(prefix) + len(authkey):]
-                        j_device = json.loads(str(self.data, 'utf-8'), encoding='utf-8')
-                        try:
-                            config_parser = configparser.ConfigParser()
-                            config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
-                                               + 'onyxmanager_Master.conf')
-                            config = config_parser['Master']
-
-                            with open(config['RemoteDirectory'] + os_slash() + j_device[GENERAL]['uuid'] + '_device.facts', 'w') \
-                                    as outfile:
-                                json.dump(j_device, outfile, sort_keys=True, indent=4)
-
-                            self.request.send(bytes(prefix + PACKET_RESPONSES[True], 'utf-8'))
-                            logging.info('%s: Cached device facts for device UUID=%s',
-                                         prefix,
-                                         j_device[GENERAL]['uuid'])
-                        except ConnectionRefusedError:
-                            logging.error('Connection to %s failed, is client accessible?',
-                                          ({'client': self.client_address[0],
-                                            'port': self.client_address[1]}))
+                        self.handle_cache_facts(authkey)
 
                     elif prefix == 'REQ.VERIFY':
-                        self.data = self.data[prefix.__len__():]
-                        agent_uuid = str(self.data, 'utf-8').upper()
-                        try:
-                            config_parser = configparser.ConfigParser()
-                            config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
-                                               + 'onyxmanager_Master.conf')
-                            config = config_parser['Master']
+                        self.handle_req_verify()
 
-                            with open(config['KeyDirectory'] + os_slash() + 'verified_agents.txt') as file:
-                                verified = False
-                                for verified_agent in file:
-                                    if agent_uuid == verified_agent.strip().upper() and not verified:
-                                        logging.info('%s: Agent UUID verified.', prefix)
-                                        self.request.send(bytes(prefix + PACKET_RESPONSES[True] + self.add_twofactor_authkey(), 'utf-8'))
-                                        verified = True
+    def handle_cache_facts(self, authkey):
+        prefix = 'CACHE.FACTS'
+        self.data = self.data[len(prefix) + len(authkey):]
+        j_device = json.loads(str(self.data, 'utf-8'), encoding='utf-8')
+        try:
+            config_parser = configparser.ConfigParser()
+            config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
+                               + 'onyxmanager_Master.conf')
+            config = config_parser['Master']
 
-                                if not verified:
-                                    logging.error('Connection to %s failed, agent UUID denied.',
-                                                  ({'client': self.client_address[0],
-                                                  'port': self.client_address[1]}))
-                                    self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
+            with open(config['RemoteDirectory'] + os_slash() + j_device[GENERAL]['uuid'] + '_device.facts', 'w') \
+                    as outfile:
+                json.dump(j_device, outfile, sort_keys=True, indent=4)
 
-                        except FileNotFoundError:
-                            self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
+            self.request.send(bytes(prefix + PACKET_RESPONSES[True], 'utf-8'))
+            logging.info('%s: Cached device facts for device UUID=%s',
+                         prefix,
+                         j_device[GENERAL]['uuid'])
+        except ConnectionRefusedError:
+            logging.error('Connection to %s failed, is client accessible?',
+                          ({'client': self.client_address[0],
+                            'port': self.client_address[1]}))
+
+    def handle_req_verify(self):
+        prefix = 'REQ.VERIFY'
+        self.data = self.data[prefix.__len__():]
+        agent_uuid = str(self.data, 'utf-8').upper()
+        try:
+            config_parser = configparser.ConfigParser()
+            config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
+                               + 'onyxmanager_Master.conf')
+            config = config_parser['Master']
+
+            with open(config['KeyDirectory'] + os_slash() + 'verified_agents.txt') as file:
+                verified = False
+                for verified_agent in file:
+                    if agent_uuid == verified_agent.strip().upper() and not verified:
+                        logging.info('%s: Agent UUID verified.', prefix)
+                        self.request.send(
+                            bytes(prefix + PACKET_RESPONSES[True] + self.add_twofactor_authkey(), 'utf-8'))
+                        verified = True
+
+                if not verified:
+                    logging.error('Connection to %s failed, agent UUID denied.',
+                                  ({'client': self.client_address[0],
+                                    'port': self.client_address[1]}))
+                    self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
+
+        except FileNotFoundError:
+            self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
 
     def add_twofactor_authkey(self):
         key = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(8))

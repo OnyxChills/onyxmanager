@@ -46,6 +46,10 @@ class OnyxTCPServer(ThreadingMixIn, TCPServer):
         socket.do_handshake()
         return (socket, addr)
 
+    def shutdown(self):
+        self.socket.close()
+        super(TCPServer, self).shutdown()
+
 
 def build_config(type, isWindows, file):
     config = configparser.ConfigParser()
@@ -101,13 +105,15 @@ class OnyxTCPHandler(StreamRequestHandler):
                     self.clean_twofactor_authkeys()
 
                     if prefix == 'CACHE.FACTS' and authkey in [key[0] for key in twofactor_authkeys]:
-                        self.handle_cache_facts(authkey)
+                        self.handle_cache_facts(prefix, authkey)
 
                     elif prefix == 'REQ.VERIFY':
-                        self.handle_req_verify()
+                        self.handle_req_verify(prefix)
 
-    def handle_cache_facts(self, authkey):
-        prefix = 'CACHE.FACTS'
+                    elif prefix == 'REQ.ADD.AGENT':
+                        self.handle_req_add_agent(prefix)
+
+    def handle_cache_facts(self, prefix, authkey):
         self.data = self.data[len(prefix) + len(authkey):]
         j_device = json.loads(str(self.data, 'utf-8'), encoding='utf-8')
         try:
@@ -129,8 +135,7 @@ class OnyxTCPHandler(StreamRequestHandler):
                           ({'client': self.client_address[0],
                             'port': self.client_address[1]}))
 
-    def handle_req_verify(self):
-        prefix = 'REQ.VERIFY'
+    def handle_req_verify(self, prefix):
         self.data = self.data[prefix.__len__():]
         agent_uuid = str(self.data, 'utf-8').upper()
         try:
@@ -156,6 +161,18 @@ class OnyxTCPHandler(StreamRequestHandler):
 
         except FileNotFoundError:
             self.request.send(bytes(prefix + PACKET_RESPONSES[False], 'utf-8'))
+
+    def handle_req_add_agent(self, prefix):
+        self.data = self.data[prefix.__len__():]
+
+        config_parser = configparser.ConfigParser()
+        config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
+                           + 'onyxmanager_Master.conf')
+        config = config_parser['Master']
+
+        with open(config['KeyDirectory'] + os_slash() + 'verified_agents.txt') as file:
+            for agent_uuid in file:
+                print(agent_uuid)
 
     def add_twofactor_authkey(self):
         key = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(8))
@@ -210,7 +227,7 @@ def check_verification():
 
                 return func(*new_args, **kwargs)
             else:
-                logging.info('Host denied agent request')
+                logging.info('Host denied agent verification.')
                 raise ConnectionRefusedError('Agent UUID was denied by the server.')
         return send
     return decorator
@@ -227,9 +244,47 @@ class OnyxSocket(ssl.SSLSocket):
         return 'CACHE.FACTS'
 
 
-PACKET_PREFIX_LIST = ['CACHE.FACTS', 'REQ.VERIFY']
+PACKET_PREFIX_LIST = ['CACHE.FACTS', 'REQ.VERIFY', 'REQ.ADD.AGENT']
 PACKET_RESPONSES = {True: 'SUCCEED', False: 'FAILED'}
 
+DAEMON_COMMAND_LIST = ['ADD.AGENT', 'REMOVE.AGENT']
+
+
+class DaemonHandler(StreamRequestHandler):
+    TCPServer.allow_reuse_address = True
+
+    def handle(self):
+            self.data = self.request.recv(2048).strip()
+
+            if self.data == b'':
+                pass
+            else:
+                print('{0} wrote: {1}'.format(self.client_address[0], self.data))
+                for prefix in DAEMON_COMMAND_LIST:
+                    if prefix == 'ADD.AGENT':
+                        self.handle_add_agent(prefix)
+
+    def handle_add_agent(self, prefix):
+        self.data = self.data[prefix.__len__():]
+
+        config_parser = configparser.ConfigParser()
+        config_parser.read(('C:\\onyxmanager\\' if prefact_os() else '/etc/onyxmanager/')
+                            + 'onyxmanager_Master.conf')
+        config = config_parser['Master']
+
+        with open(config['KeyDirectory'] + os_slash() + 'verified_agents.txt') as file:
+            for agent_uuid in file:
+                print(str(self.data, 'utf-8'))
+                print(agent_uuid)
+                if agent_uuid in str(self.data.strip().upper(), 'utf-8') :
+                    self.request.send(bytes(prefix + PACKET_RESPONSES[False] + 'Agent was already verified.', 'utf-8'))
+                else:
+                    print('Yay.')
+
+
+
+class DeamonCommandServer(TCPServer, ThreadingMixIn):
+    pass
 
 def create_self_signed_cert(dir, cert, key):
     cert_file = dir + os_slash() + cert

@@ -3,11 +3,15 @@ import json
 import os
 import atexit
 import configparser
+import threading
+import queue
 from onyxmanager import utils, Agent
 
 
 class Master():
     def __init__(self):
+        self.q = queue.Queue()
+        self.threads = []
         self.device_name = 'master'
         self.config_file = ('C:\\onyxmanager\\' if utils.prefact_os() else '/etc/onyxmanager/') + 'onyxmanager_' + 'Master' + '.conf'
 
@@ -42,9 +46,13 @@ class Master():
         self.device = Agent.Device(self.device_name, dev_uuid=loaded_UUID)
         self.cache_facts()
 
-        self.start_server()
+
+        self.run_in_thread(self.start_server)
+        self.run_in_thread(self.start_controller())
 
         atexit.register(logging.info, 'OnyxManager Master v%s - Stopped', '0.0.6')
+        atexit.register(self.server.shutdown())
+        atexit.register(self.commander.shutdown())
 
     def cache_facts(self):
         try:
@@ -64,3 +72,13 @@ class Master():
                                           self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_master.crt',
                                           self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_master.key')
         self.server.serve_forever()
+
+    def start_controller(self):
+        self.commander = utils.DeamonCommandServer(('', 27068), utils.DaemonHandler)
+        self.commander.serve_forever()
+
+    def run_in_thread(self, func, *args, **kwargs):
+        t = threading.Thread(target=func, args=args, kwargs=kwargs)
+        t.daemon = True
+        self.threads.append(t)
+        t.start()

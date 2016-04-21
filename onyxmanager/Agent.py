@@ -8,6 +8,7 @@ import re
 import subprocess
 import atexit
 import configparser
+import ssl
 from onyxmanager import utils
 
 
@@ -46,44 +47,44 @@ class Device:
         return self
 
     def build_network_facts(self):
-        def parse_ipconfig():
-            ipconfig = subprocess.Popen('ipconfig /all', stdout=subprocess.PIPE)
-            ip_info_bytes = ipconfig.stdout.read().split(b'\r\n')
-            ip_info_str = [value.decode('utf-8') for value in ip_info_bytes if value != b'']
-
-            titles = {}
-            for value in ip_info_str:
-                if value[:3] != '   ':
-                    title = value.lower().strip(' ').replace(' ', '_')
-                    if title.endswith(':'):
-                        titles[title[:-1]] = {}
-                        current_title = title[:-1]
-                    else:
-                        titles[title] = {}
-                        current_title = title
-                else:
-                    try:
-                        sub = list(key.strip(' ') for key in value.split(':', 1))
-                        titles[current_title].update(
-                            {sub[0].lower().replace('.', '').strip(' ').replace(' ', '_'): sub[1]}
-                        )
-                    except:
-                        pass
-
-            return titles
-
-        def get_ip_info():
-            data = parse_ipconfig()
-            for adapter in data:
-                if 'ethernet' in adapter or 'wireless' in adapter:
-                    adapter_info = data[adapter]
-                    try:
-                        adapter_info['media_state']
-                    except KeyError:
-                        yield adapter, adapter_info
-
         if self.facts[utils.OS]['isWindows']:
-            for adapter_name, adapter_info in get_ip_info():
+            def parse_ipconfig():
+                ipconfig = subprocess.Popen('ipconfig /all', stdout=subprocess.PIPE)
+                ip_info_bytes = ipconfig.stdout.read().split(b'\r\n')
+                ip_info_str = [value.decode('utf-8') for value in ip_info_bytes if value != b'']
+
+                titles = {}
+                for value in ip_info_str:
+                    if value[:3] != '   ':
+                        title = value.lower().strip(' ').replace(' ', '_')
+                        if title.endswith(':'):
+                            titles[title[:-1]] = {}
+                            current_title = title[:-1]
+                        else:
+                            titles[title] = {}
+                            current_title = title
+                    else:
+                        try:
+                            sub = list(key.strip(' ') for key in value.split(':', 1))
+                            titles[current_title].update(
+                                {sub[0].lower().replace('.', '').strip(' ').replace(' ', '_'): sub[1]}
+                            )
+                        except:
+                            pass
+
+                return titles
+
+            def get_ipconfig_info():
+                data = parse_ipconfig()
+                for adapter in data:
+                    if 'ethernet' in adapter or 'wireless' in adapter:
+                        adapter_info = data[adapter]
+                        try:
+                            adapter_info['media_state']
+                        except KeyError:
+                            yield adapter, adapter_info
+
+            for adapter_name, adapter_info in get_ipconfig_info():
                 try:
                     adapter_info['ipv4_address'] = ''.join(re.findall(r'[0-9]{1,3}\.?', adapter_info['ipv4_address']))
                 except:
@@ -114,6 +115,47 @@ class Module:
         self.name = name
         self.file_path = file_path
         self.device = device
+
+
+def check_verification():
+    def decorator(func):
+        def send(*args, **kwargs):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            ver_sock = AgentSocket(sock=s,
+                                  certfile=args[0].certfile,
+                                  keyfile=args[0].keyfile)
+
+            config_parser = configparser.ConfigParser()
+            config_parser.read(('C:\\onyxmanager\\' if utils.prefact_os() else '/etc/onyxmanager/')
+                               + 'onyxmanager_Agent.conf')
+            config = config_parser['Agent']
+
+            ver_sock.connect((config['Host'], int(config['Port'])))
+            ver_sock.send(bytes('REQ.VERIFY' + args[0].device.facts['general']['uuid'], 'utf-8'))
+            received = str(ver_sock.recv(1024), 'utf-8')['REQ.VERIFY'.__len__():]
+
+            if received.startswith('SUCCEED'):
+                logging.info('Host verified agent request.')
+                data = args[-1:][0]
+                new_args = args[:-1] + (bytes(received[7:], 'utf-8') + data,)
+
+                return func(*new_args, **kwargs)
+            else:
+                logging.info('Host denied agent verification.')
+                raise ConnectionRefusedError('Agent UUID was denied by the server.')
+        return send
+    return decorator
+
+
+class AgentSocket(ssl.SSLSocket):
+    def set_device(self, device):
+        self.device = device
+
+    @check_verification()
+    @utils.prefix_bytes('CACHE.FACTS')
+    def send_device_cache(self, *args, **kwargs):
+        self.send(*args, **kwargs)
+        return 'CACHE.FACTS'
 
 
 class Agent:
@@ -160,7 +202,7 @@ class Agent:
             self.cache_facts_locally()
 
         self.register_modules()
-        atexit.register(logging.info, 'OnyxManager Agent v%s - Stopped', '0.0.6')
+        atexit.register(logging.info, 'OnyxManager Agent v%s - Stopped', '0.0.7')
 
     def register_modules(self):
         if not os.path.isdir(self.config['ProgramDirectory']):
@@ -189,7 +231,7 @@ class Agent:
     def cache_facts_remotely(self):
         data = json.dumps(self.device.facts, indent=4)
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock = utils.OnyxSocket(sock=s,
+        sock = AgentSocket(sock=s,
                                 certfile=self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_agent.crt',
                                 keyfile=self.config['KeyDirectory'] + utils.os_slash() + 'onyxmanager_agent.key')
 

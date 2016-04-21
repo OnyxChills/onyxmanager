@@ -141,7 +141,18 @@ def check_verification():
 
                 return func(*new_args, **kwargs)
             else:
-                logging.info('Host denied agent verification.')
+                logging.info('Host denied agent verification, agent made a request for verification.')
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                ver_sock = AgentSocket(sock=s,
+                                       certfile=args[0].certfile,
+                                       keyfile=args[0].keyfile)
+                ver_sock.connect((config['Host'], int(config['Port'])))
+                ver_sock.send(bytes('REQ.ADD.AGENT' + args[0].device.facts['general']['uuid'], 'utf-8'))
+                received = str(ver_sock.recv(1024), 'utf-8')['REQ.ADD.AGENT'.__len__():]
+
+                if received.startswith('SUCCEED'):
+                    logging.info(received[len('SUCCEED'):])
+
                 raise ConnectionRefusedError('Agent UUID was denied by the server.')
         return send
     return decorator

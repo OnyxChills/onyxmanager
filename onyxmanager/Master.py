@@ -123,8 +123,28 @@ class MasterTCPHandler(StreamRequestHandler):
         config = config_parser['Master']
 
         with open(config['KeyDirectory'] + utils.os_slash() + 'verified_agents.txt') as file:
+            empty = True
             for agent_uuid in file:
-                print(agent_uuid)
+                empty = False
+                if agent_uuid != str(self.data, 'utf-8'):
+                    with open(config['KeyDirectory'] + utils.os_slash() + 'unverified_agents.txt', 'a') as write_file:
+                        write_file.write(str(self.data, 'utf-8'))
+                    self.request.send(bytes(prefix + utils.PACKET_RESPONSES[True] + 'Agent requested verification.', 'utf-8'))
+                else:
+                    self.request.send(bytes(prefix + utils.PACKET_RESPONSES[False] + 'Agent was already verified.', 'utf-8'))
+
+            if empty:
+                with open(config['KeyDirectory'] + utils.os_slash() + 'unverified_agents.txt') as file:
+                    empty = True
+                    for _ in file:
+                        empty = False
+
+                if empty:
+                    with open(config['KeyDirectory'] + utils.os_slash() + 'unverified_agents.txt', 'a') as write_file:
+                        write_file.write(str(self.data, 'utf-8').strip().upper())
+                    self.request.send(
+                        bytes(prefix + utils.PACKET_RESPONSES[True] + 'Agent requested verification.', 'utf-8'))
+
 
     def add_twofactor_authkey(self):
         key = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(8))
@@ -163,14 +183,34 @@ class DaemonHandler(StreamRequestHandler):
                             + 'onyxmanager_Master.conf')
         config = config_parser['Master']
 
-        with open(config['KeyDirectory'] + utils.os_slash() + 'verified_agents.txt') as file:
-            for agent_uuid in file:
+        with open(config['KeyDirectory'] + utils.os_slash() + 'verified_agents.txt', 'a+') as write_file:
+            empty = True
+            verified = False
+            for agent_uuid in write_file:
                 print(str(self.data, 'utf-8'))
                 print(agent_uuid)
-                if agent_uuid in str(self.data.strip().upper(), 'utf-8') :
+                empty = False
+                if agent_uuid in str(self.data.strip().upper(), 'utf-8'):
                     self.request.send(bytes(prefix + utils.PACKET_RESPONSES[False] + 'Agent was already verified.', 'utf-8'))
+                    break
                 else:
                     print('Yay.')
+                    with open(config['KeyDirectory'] + utils.os_slash() + 'unverified_agents.txt') as file:
+                        if agent_uuid in str(self.data.strip().upper(), 'utf-8'):
+                            write_file.write(agent_uuid)
+                            self.request.send(bytes(prefix + utils.PACKET_RESPONSES[True] + 'Agent was successfully verified.', 'utf-8'))
+                            verified = True
+                        else:
+                            pass
+            if empty:
+                print('Yay.')
+                with open(config['KeyDirectory'] + utils.os_slash() + 'unverified_agents.txt') as file:
+                        write_file.write(str(self.data.strip().upper(), 'utf-8'))
+                        self.request.send(bytes(prefix + utils.PACKET_RESPONSES[True] + 'Agent was successfully verified.', 'utf-8'))
+                        verified = True
+
+            if not verified:
+                self.request.send(bytes(prefix + utils.PACKET_RESPONSES[False] + 'Agent never requested verifification.', 'utf-8'))
 
 
 class DeamonCommandServer(TCPServer, ThreadingMixIn):

@@ -27,6 +27,7 @@ class Device:
         self.build_general_facts(name).build_os_facts().build_network_facts()
 
     def build_general_facts(self, name=''):
+        logging.info('Building general facts for the device.')
         self.facts[utils.GENERAL]['name'] = socket.gethostname() if name == '' else name
         if self.j_UUID == '':
             try:
@@ -40,6 +41,7 @@ class Device:
         return self
 
     def build_os_facts(self):
+        logging.info('Building operating system facts for the device.')
         self.facts[utils.OS]['platform'] = platform.platform(0, 1).replace('-', ' ').split(' ', 1)[0]
         self.facts[utils.OS]['isWindows'] = self.facts[utils.OS]['platform'] == 'Windows'
         self.facts[utils.OS]['bit'] = re.match(r'(?P<pre>(\S*))(?P<bit>([63][42])|(armv[0-9]))(?P<post>(\S*))',
@@ -47,6 +49,8 @@ class Device:
         return self
 
     def build_network_facts(self):
+        logging.info('Building network facts for the device.')
+
         if self.facts[utils.OS]['isWindows']:
             def parse_ipconfig():
                 ipconfig = subprocess.Popen('ipconfig /all', stdout=subprocess.PIPE)
@@ -103,9 +107,11 @@ class Device:
         return self
 
     def build_facts(self):
+        logging.info('Rebuilding all facts for the device.')
         self.build_general_facts(self.facts[utils.GENERAL]['name']).build_os_facts().build_network_facts()
 
     def dump_facts_as_json(self, file_name):
+        logging.info('Dumping all facts locally to: {0}.'.format(file_name))
         with open(file_name, 'w') as outfile:
             json.dump(self.facts, outfile, sort_keys=True, indent=4)
 
@@ -141,7 +147,7 @@ def check_verification():
 
                 return func(*new_args, **kwargs)
             else:
-                logging.info('Host denied agent verification, agent made a request for verification.')
+                logging.warning('Host denied agent verification, agent made a request for verification.')
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 ver_sock = AgentSocket(sock=s,
                                        certfile=args[0].certfile,
@@ -165,6 +171,7 @@ class AgentSocket(ssl.SSLSocket):
     @check_verification()
     @utils.prefix_bytes('CACHE.FACTS')
     def send_device_cache(self, *args, **kwargs):
+        logging.info('Sending device facts to be cached on remote server.')
         self.send(*args, **kwargs)
         return 'CACHE.FACTS'
 
@@ -188,7 +195,7 @@ class Agent:
                             datefmt='%m/%d/%Y %I:%M:%S')
 
         logging.info('')
-        logging.info('OnyxManager Agent v%s - Started', '0.0.6')
+        logging.info('OnyxManager Agent v%s - Started', '0.0.7')
         logging.info('Log directory set to \'%s\'', self.config['LogDirectory'])
         logging.info('Working directory set to \'%s\'', self.config['ProgramDirectory'])
 
@@ -197,15 +204,20 @@ class Agent:
                 open(self.config['ProgramDirectory'] + utils.os_slash() + 'agent.facts')
             )['general']['uuid']
 
+            logging.info('Loaded previous device UUID.')
+
         except FileNotFoundError or IOError:
             loaded_UUID = ''
+            logging.warning('No previous device UUID was found, new one will be generated.')
         except KeyError:
             loaded_UUID = ''
+            logging.warning('No previous device UUID was found, new one will be generated.')
 
         self.device = Device(device_name, dev_uuid=loaded_UUID)
 
         if not os.path.isdir(self.config['KeyDirectory']):
             os.mkdir(self.config['KeyDirectory'])
+            logging.info('No key directory found, creating it.')
 
         utils.create_self_signed_cert(self.config['KeyDirectory'], 'onyxmanager_agent.crt', 'onyxmanager_agent.key')
 

@@ -122,6 +122,10 @@ class MasterTCPHandler(StreamRequestHandler):
                            + 'onyxmanager_Master.conf')
         config = config_parser['Master']
 
+        if not os.path.isfile(config['KeyDirectory'] + utils.os_slash() + 'verified_agents.txt'):
+            open(config['KeyDirectory'] + utils.os_slash() + 'verified_agents.txt', 'a').close()
+            logging.warning('The \'{0}\' file did not exist, so it was created.'.format(config['KeyDirectory'] + utils.os_slash() + 'verified_agents.txt'))
+
         with open(config['KeyDirectory'] + utils.os_slash() + 'verified_agents.txt') as file:
             empty = True
             for agent_uuid in file:
@@ -134,6 +138,11 @@ class MasterTCPHandler(StreamRequestHandler):
                     self.request.send(bytes(prefix + utils.PACKET_RESPONSES[False] + 'Agent was already verified.', 'utf-8'))
 
             if empty:
+                if not os.path.isfile(config['KeyDirectory'] + utils.os_slash() + 'unverified_agents.txt'):
+                    open(config['KeyDirectory'] + utils.os_slash() + 'unverified_agents.txt', 'a').close()
+                logging.warning('The \'{0}\' file did not exist, so it was created.'.format(
+                    config['KeyDirectory'] + utils.os_slash() + 'unverified_agents.txt'))
+
                 with open(config['KeyDirectory'] + utils.os_slash() + 'unverified_agents.txt') as file:
                     empty = True
                     for _ in file:
@@ -182,6 +191,8 @@ class DaemonHandler(StreamRequestHandler):
         config_parser.read(('C:\\onyxmanager\\' if utils.prefact_os() else '/etc/onyxmanager/')
                             + 'onyxmanager_Master.conf')
         config = config_parser['Master']
+
+
 
         with open(config['KeyDirectory'] + utils.os_slash() + 'verified_agents.txt', 'a+') as write_file:
             empty = True
@@ -247,10 +258,15 @@ class Master:
                 open(self.config['ProgramDirectory'] + utils.os_slash() + 'master.facts')
             )[utils.GENERAL]['uuid']
 
+            logging.info('Loaded previous device UUID.')
+
         except FileNotFoundError:
             loaded_UUID = ''
+            logging.warning('No previous device UUID was found, new one will be generated.')
+
         except KeyError:
             loaded_UUID = ''
+            logging.warning('No previous device UUID was found, new one will be generated.')
 
         self.device = Agent.Device(self.device_name, dev_uuid=loaded_UUID)
         self.cache_facts()
@@ -259,7 +275,7 @@ class Master:
         self.run_in_thread(self.start_server)
         self.run_in_thread(self.start_controller())
 
-        atexit.register(logging.info, 'OnyxManager Master v%s - Stopped', '0.0.6')
+        atexit.register(logging.info, 'OnyxManager Master v%s - Stopped', '0.0.7')
         atexit.register(self.server.shutdown())
         atexit.register(self.commander.shutdown())
 
@@ -273,8 +289,12 @@ class Master:
             raise e
 
     def start_server(self):
+        logging.info('Starting the master server.')
+
         if not os.path.isdir(self.config['KeyDirectory']):
             os.mkdir(self.config['KeyDirectory'])
+            logging.info('No key directory found, creating it.')
+
         utils.create_self_signed_cert(self.config['KeyDirectory'], 'onyxmanager_master.crt', 'onyxmanager_master.key')
         self.server = MasterTCPServer(('', int(self.config['Port'])),
                                           MasterTCPHandler,
@@ -283,6 +303,8 @@ class Master:
         self.server.serve_forever()
 
     def start_controller(self):
+        logging.info('Starting the daemon controller socket.')
+
         self.commander = DeamonCommandServer(('', 27068), DaemonHandler)
         self.commander.serve_forever()
 

@@ -1,5 +1,6 @@
 import configparser
 import os
+import logging
 from OpenSSL import crypto
 from platform import platform
 
@@ -104,3 +105,5 @@ def create_self_signed_cert(dir, cert, key):
             str(crypto.dump_certificate(crypto.FILETYPE_PEM, cert), 'utf-8'))
         open(key_file, 'wt').write(
             str(crypto.dump_privatekey(crypto.FILETYPE_PEM, k), 'utf-8'))
+
+        logging.info('Generated SSL certificates as none were present.')
